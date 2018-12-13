@@ -31,7 +31,7 @@ flags.DEFINE_string("data_path", "./",
                     "Directory containing coco. If not exists, "
                     "the directory will be created, and the data "
                     "will be downloaded.")
-flags.DEFINE_string("config", "config_ptb_small", "The config to use.")
+flags.DEFINE_string("config", "config_ptb_tiny", "The config to use.")
 FLAGS = flags.FLAGS
 
 config = importlib.import_module(FLAGS.config)
@@ -211,11 +211,13 @@ def _main(_):
             iterator.switch_to_val_data(sess)
         elif mode_string == 'test':
             iterator.switch_to_test_data(sess)
+        elif mode_string == 'print':
+            iterator.switch_to_train_data(sess)
         else:
             raise ValueError("Expect mode_string to be one of "
                              "['valid', 'test'], got %s" % mode_string)
 
-        target_list, inference_list = [], []
+        target_list, inference_list, print_list = [], [], []
         loss, steps = 0., 0
         while True:
             try:
@@ -223,7 +225,7 @@ def _main(_):
                     "mle_loss": mle_loss,
                     "num_steps": num_steps
                 }
-                if mode_string == 'test':
+                if mode_string == 'test' or mode_string == 'print':
                     fetches['target_sample_id'] = data_batch["text_ids"]
                     fetches['infer_sample_id'] = infer_sample_ids
 
@@ -243,6 +245,9 @@ def _main(_):
                     for inf in inferences:
                         inference_list.extend( # remove <BOS>
                             inf.split('<EOS>')[0].strip().split()[1:])
+                elif mode_string == 'print':
+                    inferences = _id2word_map(rtns['infer_sample_id'].tolist())
+                    print_list.extend(inferences)
 
             except tf.errors.OutOfRangeError:
                 break
@@ -269,6 +274,9 @@ def _main(_):
             print(rst_test)
             bleu_log.write(rst_test)
             bleu_log.flush()
+        elif mode_string == 'print':
+            for line in print_list:
+                print(line)
 
         return
 
@@ -306,6 +314,7 @@ def _main(_):
         sess.run(tf.local_variables_initializer())
         sess.run(tf.tables_initializer())
 
+
         # Generator pre-training
         for g_epoch in range(config.generator_pretrain_epoch):
             _g_train_epoch(sess, g_epoch, 'pretrain')
@@ -319,6 +328,7 @@ def _main(_):
             _d_run_epoch(sess, d_epoch)
 
         # Adversarial training
+        cur_epoch = None
         for update_epoch in range(config.adversial_epoch):
             cur_epoch = update_epoch + config.generator_pretrain_epoch
             _g_train_epoch(sess, cur_epoch, 'train')
@@ -328,8 +338,11 @@ def _main(_):
                 _g_test_epoch(sess, cur_epoch, 'valid')
                 _g_test_epoch(sess, cur_epoch, 'test')
 
+        _g_test_epoch(sess, cur_epoch, 'print')
+
     log.close()
     bleu_log.close()
+
 
 if __name__ == '__main__':
     tf.app.run(main=_main)

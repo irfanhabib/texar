@@ -1,6 +1,6 @@
-generator_pretrain_epoch = 80
-discriminator_pretrain_epoch = 80
-adversial_epoch = 100
+generator_pretrain_epoch = 1
+discriminator_pretrain_epoch = 1
+adversial_epoch = 1
 
 hidden_size = 32
 batch_size = 64
